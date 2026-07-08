@@ -1,0 +1,1195 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shopee Analytics Dashboard & Profit Tracker Pro</title>
+    <!-- Tailwind CSS untuk Styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js untuk Grafik -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- SheetJS untuk membaca dan menulis Excel -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- html2pdf untuk ekspor PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f3f4f6; }
+        .tab-active { border-bottom: 2px solid #f97316; color: #f97316; font-weight: 600; }
+        .hide { display: none; }
+        
+        @media print {
+            aside, header, #header-actions, .html2pdf-ignore, button, .ml-auto {
+                display: none !important;
+            }
+            body {
+                background-color: white !important;
+                color: black !important;
+                font-size: 12px;
+            }
+            main {
+                margin: 0 !important;
+                padding: 0 !important;
+                width: 100% !important;
+                height: auto !important;
+                overflow: visible !important;
+                position: relative !important;
+            }
+            #pdf-content {
+                overflow: visible !important;
+                height: auto !important;
+                padding: 0 !important;
+            }
+            canvas {
+                max-width: 100% !important;
+                height: auto !important;
+            }
+            .grid {
+                display: grid !important;
+            }
+        }
+    </style>
+</head>
+<body class="text-gray-800 h-screen flex overflow-hidden">
+
+    <!-- Sidebar -->
+    <aside class="w-64 bg-white shadow-md flex flex-col z-10">
+        <div class="p-6 flex items-center justify-center border-b">
+            <i data-lucide="shopping-bag" class="text-orange-500 w-8 h-8 mr-2"></i>
+            <h1 class="text-xl font-bold text-gray-800">@deviicintya</h1>
+        </div>
+        <nav class="flex-1 p-4 space-y-2">
+            <button onclick="switchTab('dashboard')" id="nav-dashboard" class="w-full flex items-center p-3 rounded-lg bg-orange-50 text-orange-600 font-medium transition-colors">
+                <i data-lucide="layout-dashboard" class="w-5 h-5 mr-3"></i> Dashboard & Profit
+            </button>
+            <button onclick="switchTab('input')" id="nav-input" class="w-full flex items-center p-3 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors">
+                <i data-lucide="file-spreadsheet" class="w-5 h-5 mr-3"></i> Input Data & Ads
+            </button>
+            <button onclick="switchTab('settings')" id="nav-settings" class="w-full flex items-center p-3 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors">
+                <i data-lucide="settings" class="w-5 h-5 mr-3"></i> Kelola Toko & Biaya
+            </button>
+        </nav>
+        <div class="p-4 border-t text-sm text-gray-400 text-center">
+            Personal Shopee Dashboard
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex flex-col h-full overflow-hidden relative">
+        <!-- Toast Notification -->
+        <div id="toast" class="absolute top-4 right-4 bg-green-500 text-white px-6 py-3 rounded shadow-lg transform transition-all duration-300 translate-x-full opacity-0 z-50 flex items-center">
+            <i data-lucide="check-circle" class="w-5 h-5 mr-2"></i>
+            <span id="toast-msg">Notifikasi</span>
+        </div>
+
+        <!-- HEADER -->
+        <header class="bg-white shadow-sm p-4 flex justify-between items-center z-0">
+            <h2 id="page-title" class="text-2xl font-bold text-gray-800">Dashboard Performa & Finansial</h2>
+            <div class="flex space-x-3" id="header-actions">
+                <button onclick="printDashboard()" class="flex items-center px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm transition-colors">
+                    <i data-lucide="printer" class="w-4 h-4 mr-2"></i> Cetak Dashboard
+                </button>
+                <button onclick="openExcelModal()" class="flex items-center px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm transition-colors">
+                    <i data-lucide="file-spreadsheet" class="w-4 h-4 mr-2"></i> Ekspor Excel Pajak
+                </button>
+            </div>
+        </header>
+
+        <!-- CONTENT AREA -->
+        <div class="flex-1 overflow-y-auto p-6" id="pdf-content">
+            
+            <!-- TAB: DASHBOARD -->
+            <div id="tab-dashboard" class="space-y-6">
+                <!-- Filter Bar -->
+                <div class="bg-white p-4 rounded-xl shadow-sm flex flex-wrap gap-4 items-end html2pdf-ignore">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-600 mb-1">Pilih Toko</label>
+                        <select id="filter-store" class="border border-gray-300 rounded p-2 focus:outline-none focus:border-orange-500 w-48" onchange="renderDashboard()">
+                            <option value="ALL">Semua Toko</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-600 mb-1">Periode</label>
+                        <select id="filter-period" class="border border-gray-300 rounded p-2 focus:outline-none focus:border-orange-500 w-48" onchange="renderDashboard()">
+                            <option value="7">7 Hari Terakhir</option>
+                            <option value="30">30 Hari Terakhir</option>
+                            <option value="all">Semua Waktu</option>
+                        </select>
+                    </div>
+                    <button onclick="triggerResetData()" class="ml-auto flex items-center px-3 py-2 text-red-500 hover:bg-red-50 rounded text-sm transition-colors">
+                        <i data-lucide="trash-2" class="w-4 h-4 mr-1"></i> Reset Semua Data
+                    </button>
+                </div>
+
+                <!-- KPI Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <!-- Omzet (Hanya Sukses) -->
+                    <div class="bg-white p-6 rounded-xl shadow-sm border-l-4 border-blue-500">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <p class="text-sm text-gray-500 font-medium">Omzet (Order Sukses)</p>
+                                <h3 class="text-2xl font-bold text-gray-800 mt-1" id="kpi-omzet">Rp 0</h3>
+                                <p class="text-xs text-gray-500 mt-1" id="kpi-orders">0 Order Berhasil</p>
+                            </div>
+                            <div class="p-2 bg-blue-50 rounded-lg text-blue-500">
+                                <i data-lucide="wallet" class="w-6 h-6"></i>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Profit & ROI -->
+                    <div class="bg-white p-6 rounded-xl shadow-sm border-l-4 border-emerald-500">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <p class="text-sm text-gray-500 font-medium">Net Profit</p>
+                                <h3 class="text-2xl font-bold text-emerald-600 mt-1" id="kpi-profit">Rp 0</h3>
+                                <p class="text-xs text-emerald-600 font-semibold mt-1" id="kpi-roi">ROI: 0x</p>
+                            </div>
+                            <div class="p-2 bg-emerald-50 rounded-lg text-emerald-500">
+                                <i data-lucide="trending-up" class="w-6 h-6"></i>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Ad Spend & ROAS / ACOS -->
+                    <div class="bg-white p-6 rounded-xl shadow-sm border-l-4 border-orange-500">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <p class="text-sm text-gray-500 font-medium">Ad Spend</p>
+                                <h3 class="text-2xl font-bold text-gray-800 mt-1" id="kpi-ads">Rp 0</h3>
+                                <p class="text-xs text-orange-600 font-semibold mt-1" id="kpi-roas">ROAS: 0x | ACOS: 0%</p>
+                            </div>
+                            <div class="p-2 bg-orange-50 rounded-lg text-orange-500">
+                                <i data-lucide="megaphone" class="w-6 h-6"></i>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- HPP, Admin Fee & Berat -->
+                    <div class="bg-white p-6 rounded-xl shadow-sm border-l-4 border-purple-500">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <p class="text-sm text-gray-500 font-medium">Potongan Shopee & HPP</p>
+                                <h3 class="text-lg font-bold text-gray-700 mt-1" id="kpi-hpp">HPP: Rp 0</h3>
+                                <p class="text-xs text-gray-500 mt-1" id="kpi-admin">Fee Admin: Rp 0</p>
+                            </div>
+                            <div class="p-2 bg-purple-50 rounded-lg text-purple-500">
+                                <i data-lucide="scale" class="w-6 h-6"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Charts -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="bg-white p-6 rounded-xl shadow-sm">
+                        <h3 class="text-lg font-bold text-gray-800 mb-4">Tren Omzet, Profit & Ad Spend</h3>
+                        <div class="h-48 relative w-full">
+                            <canvas id="chartOmzet"></canvas>
+                        </div>
+                    </div>
+                    <div class="bg-white p-6 rounded-xl shadow-sm">
+                        <h3 class="text-lg font-bold text-gray-800 mb-4">Tren Order Harian (Sukses vs Batal)</h3>
+                        <div class="h-48 relative w-full">
+                            <canvas id="chartOrder"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Table Data -->
+                <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+                    <div class="p-4 border-b bg-gray-50 flex justify-between items-center">
+                        <h3 class="text-lg font-bold text-gray-800">Tabel Rekap Finansial Harian</h3>
+                        <span class="text-xs text-gray-400 font-mono">Profit = Omzet - HPP - Ads - Potongan Shopee (Admin Fee, Layanan & Lainnya)</span>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-gray-50 text-gray-600 text-xs uppercase tracking-wider">
+                                    <th class="p-4 border-b whitespace-nowrap">Tanggal</th>
+                                    <th class="p-4 border-b whitespace-nowrap">Toko</th>
+                                    <th class="p-4 border-b text-right whitespace-nowrap">Omzet (Sukses)</th>
+                                    <th class="p-4 border-b text-right whitespace-nowrap">HPP</th>
+                                    <th class="p-4 border-b text-right whitespace-nowrap">Potongan Shopee</th>
+                                    <th class="p-4 border-b text-right whitespace-nowrap">Ad Spend</th>
+                                    <th class="p-4 border-b text-right whitespace-nowrap">Net Profit</th>
+                                    <th class="p-4 border-b text-center whitespace-nowrap">ROI</th>
+                                    <th class="p-4 border-b text-center whitespace-nowrap">ROAS</th>
+                                    <th class="p-4 border-b text-center whitespace-nowrap">Order (S/B)</th>
+                                    <th class="p-4 border-b text-right whitespace-nowrap">Berat (gr)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="table-body" class="text-sm text-gray-700">
+                                <!-- Data injected via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB: INPUT DATA -->
+            <div id="tab-input" class="hide space-y-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Upload Excel -->
+                    <div class="bg-white p-6 rounded-xl shadow-sm">
+                        <h3 class="text-lg font-bold text-gray-800 mb-4 border-b pb-2 flex items-center">
+                            <i data-lucide="file-up" class="w-5 h-5 mr-2 text-orange-500"></i> Upload Data Order (Excel)
+                        </h3>
+                        <p class="text-sm text-gray-500 mb-4">
+                            Upload file excel export Shopee (format: <code class="bg-gray-100 p-1 rounded font-mono">Order.all.yyyymmdd_yyyymmdd</code>). 
+                            <strong>Sistem hanya akan menghitung Omzet, Jumlah Order Sukses, & Berat dari status "Perlu Dikirim" & "Sedang Dikirim".</strong> Order batal tidak dihitung ke omzet/berat.
+                        </p>
+                        
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-600 mb-1">Toko</label>
+                                <select id="upload-store" class="w-full border border-gray-300 rounded p-2 focus:border-orange-500">
+                                    <!-- Options injected -->
+                                </select>
+                            </div>
+                            
+                            <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:bg-gray-50 transition-colors">
+                                <input type="file" id="excel-file" accept=".xlsx, .xls, .csv" class="hidden" onchange="handleFileUpload(event)">
+                                <label for="excel-file" class="cursor-pointer flex flex-col items-center">
+                                    <i data-lucide="upload-cloud" class="w-10 h-10 text-gray-400 mb-2"></i>
+                                    <span class="text-sm text-blue-600 font-medium">Klik untuk pilih file Excel</span>
+                                    <span class="text-xs text-gray-400 mt-1">.xls atau .xlsx</span>
+                                </label>
+                            </div>
+                            <div id="upload-status" class="text-sm text-center hidden"></div>
+                        </div>
+                    </div>
+
+                    <!-- Input Ad Spend -->
+                    <div class="bg-white p-6 rounded-xl shadow-sm">
+                        <h3 class="text-lg font-bold text-gray-800 mb-4 border-b pb-2 flex items-center">
+                            <i data-lucide="badge-dollar-sign" class="w-5 h-5 mr-2 text-green-500"></i> Input Ad Spend Harian
+                        </h3>
+                        <form id="form-ads" onsubmit="handleAdSpend(event)" class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-600 mb-1">Toko</label>
+                                <select id="ads-store" class="w-full border border-gray-300 rounded p-2 focus:border-orange-500" required>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-600 mb-1">Tanggal</label>
+                                <input type="date" id="ads-date" class="w-full border border-gray-300 rounded p-2 focus:border-orange-500" required>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-600 mb-1">Total Biaya Iklan (Rp)</label>
+                                <input type="number" id="ads-amount" class="w-full border border-gray-300 rounded p-2 focus:border-orange-500" placeholder="Contoh: 50000" required>
+                            </div>
+                            <button type="submit" class="w-full bg-orange-500 text-white rounded p-2 font-medium hover:bg-orange-600 transition-colors">
+                                Simpan Ad Spend
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB: SETTINGS -->
+            <div id="tab-settings" class="hide space-y-6">
+                <div class="bg-white p-6 rounded-xl shadow-sm max-w-4xl">
+                    <h3 class="text-lg font-bold text-gray-800 mb-4 border-b pb-2 flex items-center">
+                        <i data-lucide="store" class="w-5 h-5 mr-2 text-blue-500"></i> Kelola Daftar Toko & Parameter Biaya Admin Shopee
+                    </h3>
+                    
+                    <form onsubmit="addStore(event)" class="space-y-4 mb-8 bg-gray-50 p-4 rounded-lg border border-gray-200">
+                        <h4 class="font-bold text-gray-700 text-sm">Tambah Toko Baru & Atur Skema Biaya:</h4>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+                            <div class="lg:col-span-2">
+                                <label class="block text-xs font-semibold text-gray-500 mb-1">Nama Toko</label>
+                                <input type="text" id="new-store-name" class="w-full border border-gray-300 rounded p-2 text-sm focus:border-orange-500" placeholder="Contoh: Toko C" required>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-500 mb-1">Admin Fee (%)</label>
+                                <input type="number" step="0.01" id="new-store-fee" class="w-full border border-gray-300 rounded p-2 text-sm focus:border-orange-500" placeholder="Contoh: 6.0" required>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-500 mb-1">Layanan / Pesanan (Rp)</label>
+                                <input type="number" id="new-store-service" class="w-full border border-gray-300 rounded p-2 text-sm focus:border-orange-500" value="1250" placeholder="Default: 1250" required>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-500 mb-1">Admin Lainnya (Rp / Pesanan)</label>
+                                <input type="number" id="new-store-other-rp" class="w-full border border-gray-300 rounded p-2 text-sm focus:border-orange-500" value="0" placeholder="Contoh: 500" required>
+                            </div>
+                            <div class="md:col-span-2 lg:col-span-2">
+                                <label class="block text-xs font-semibold text-gray-500 mb-1">Admin Lainnya (%)</label>
+                                <input type="number" step="0.01" id="new-store-other-pct" class="w-full border border-gray-300 rounded p-2 text-sm focus:border-orange-500" value="0" placeholder="Contoh: 1.5">
+                            </div>
+                            <div class="lg:col-span-5 flex items-end">
+                                <button type="submit" class="w-full bg-blue-500 text-white py-2 rounded hover:bg-blue-600 transition-colors font-medium text-sm">
+                                    Tambah Toko & Skema Biaya
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+
+                    <h4 class="text-sm font-semibold text-gray-700 mb-2">Daftar Toko & Detail Skema Potongan:</h4>
+                    <div id="store-list" class="space-y-3">
+                        <!-- List injected -->
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- CUSTOM CONFIRM MODAL -->
+    <div id="custom-confirm" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 html2pdf-ignore">
+        <div class="bg-white p-6 rounded-xl max-w-sm w-full mx-4 shadow-xl">
+            <h3 class="text-lg font-bold text-gray-900 flex items-center">
+                <i data-lucide="alert-triangle" class="text-red-500 w-6 h-6 mr-2"></i>
+                Konfirmasi Tindakan
+            </h3>
+            <p id="confirm-message" class="text-sm text-gray-600 mt-2">Apakah Anda yakin ingin melanjutkan tindakan ini?</p>
+            <div class="flex justify-end space-x-3 mt-6">
+                <button id="confirm-btn-cancel" class="px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 text-sm transition-colors">Batal</button>
+                <button id="confirm-btn-yes" class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 text-sm transition-colors">Ya, Lanjutkan</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL EKSPOR EXCEL PAJAK (RENTANG TANGGAL) -->
+    <div id="excel-export-modal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 html2pdf-ignore">
+        <div class="bg-white p-6 rounded-xl max-w-sm w-full mx-4 shadow-xl">
+            <h3 class="text-lg font-bold text-gray-900 flex items-center mb-3">
+                <i data-lucide="file-spreadsheet" class="text-green-600 w-6 h-6 mr-2"></i>
+                Ekspor Buku Keuangan
+            </h3>
+            <p class="text-xs text-gray-500 mb-4">Pilih rentang waktu untuk menyusun laporan rekap transaksi laba kotor & bersih yang siap diajukan untuk lampiran pajak.</p>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-500 mb-1">Tanggal Mulai</label>
+                    <input type="date" id="excel-start-date" class="w-full border border-gray-300 rounded p-2 focus:border-green-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-500 mb-1">Tanggal Selesai</label>
+                    <input type="date" id="excel-end-date" class="w-full border border-gray-300 rounded p-2 focus:border-green-500">
+                </div>
+            </div>
+            <div class="flex justify-end space-x-3 mt-6">
+                <button onclick="closeExcelModal()" class="px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 text-sm transition-colors">Batal</button>
+                <button onclick="processExcelExport()" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm transition-colors flex items-center">
+                    <i data-lucide="download" class="w-4 h-4 mr-1.5"></i> Buat Laporan
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- STATE MANAGEMENT ---
+        let appData = JSON.parse(localStorage.getItem('shopeeAppData')) || {};
+        
+        // Simpan konfigurasi toko dengan detail potongan lengkap
+        let rawStores = localStorage.getItem('shopeeStores');
+        let stores = [];
+        try {
+            stores = JSON.parse(rawStores) || [];
+            // Migrasi skema dari versi lama jika ada
+            if (stores.length > 0) {
+                stores = stores.map(s => {
+                    if (typeof s === 'string') {
+                        return { name: s, adminFee: 6.0, serviceFee: 1250, otherFeeRp: 0, otherFeePct: 0 };
+                    }
+                    return {
+                        name: s.name,
+                        adminFee: s.adminFee !== undefined ? s.adminFee : 6.0,
+                        serviceFee: s.serviceFee !== undefined ? s.serviceFee : 1250,
+                        otherFeeRp: s.otherFeeRp !== undefined ? s.otherFeeRp : 0,
+                        otherFeePct: s.otherFeePct !== undefined ? s.otherFeePct : 0
+                    };
+                });
+            }
+        } catch(e) {
+            stores = [];
+        }
+
+        if (stores.length === 0) {
+            stores = [
+                { name: 'Toko Utama', adminFee: 6.0, serviceFee: 1250, otherFeeRp: 0, otherFeePct: 0 },
+                { name: 'Toko Cabang 1', adminFee: 5.5, serviceFee: 1250, otherFeeRp: 0, otherFeePct: 0 },
+                { name: 'Toko Cabang 2', adminFee: 6.5, serviceFee: 1250, otherFeeRp: 0, otherFeePct: 0 }
+            ];
+        }
+        localStorage.setItem('shopeeStores', JSON.stringify(stores));
+
+        let chart1, chart2; // Chart instances
+
+        // --- NAVIGATION ---
+        function switchTab(tabId) {
+            document.querySelectorAll('aside nav button').forEach(btn => {
+                btn.classList.remove('bg-orange-50', 'text-orange-600', 'font-medium');
+                btn.classList.add('text-gray-600');
+            });
+            const activeBtn = document.getElementById('nav-' + tabId);
+            activeBtn.classList.remove('text-gray-600');
+            activeBtn.classList.add('bg-orange-50', 'text-orange-600', 'font-medium');
+
+            ['dashboard', 'input', 'settings'].forEach(id => {
+                document.getElementById('tab-' + id).classList.add('hide');
+            });
+            document.getElementById('tab-' + tabId).classList.remove('hide');
+
+            const headerActions = document.getElementById('header-actions');
+            const pageTitle = document.getElementById('page-title');
+            
+            if(tabId === 'dashboard') {
+                headerActions.classList.remove('hide');
+                pageTitle.innerText = "Dashboard Performa & Finansial";
+                renderDashboard();
+            } else if (tabId === 'input') {
+                headerActions.classList.add('hide');
+                pageTitle.innerText = "Input Data & Ads Harian";
+                populateStoreSelects();
+                document.getElementById('ads-date').valueAsDate = new Date();
+            } else {
+                headerActions.classList.add('hide');
+                pageTitle.innerText = "Pengaturan Toko & Komponen Biaya";
+                renderStoreList();
+            }
+        }
+
+        // --- TOAST NOTIFICATION ---
+        function showToast(msg, type = 'success') {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-msg').innerText = msg;
+            
+            if(type === 'error') {
+                toast.classList.replace('bg-green-500', 'bg-red-500');
+                toast.querySelector('i').setAttribute('data-lucide', 'alert-circle');
+            } else {
+                toast.classList.replace('bg-red-500', 'bg-green-500');
+                toast.querySelector('i').setAttribute('data-lucide', 'check-circle');
+            }
+            lucide.createIcons();
+
+            toast.classList.remove('translate-x-full', 'opacity-0');
+            setTimeout(() => {
+                toast.classList.add('translate-x-full', 'opacity-0');
+            }, 3000);
+        }
+
+        // --- CUSTOM CONFIRM MODAL (REPLACE FORBIDDEN confirm()) ---
+        let confirmPromiseResolver = null;
+        function customConfirm(message) {
+            document.getElementById('confirm-message').innerText = message;
+            const modal = document.getElementById('custom-confirm');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            
+            return new Promise((resolve) => {
+                confirmPromiseResolver = resolve;
+            });
+        }
+
+        document.getElementById('confirm-btn-yes').addEventListener('click', () => {
+            closeConfirmModal();
+            if(confirmPromiseResolver) confirmPromiseResolver(true);
+        });
+
+        document.getElementById('confirm-btn-cancel').addEventListener('click', () => {
+            closeConfirmModal();
+            if(confirmPromiseResolver) confirmPromiseResolver(false);
+        });
+
+        function closeConfirmModal() {
+            const modal = document.getElementById('custom-confirm');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        // --- STORE MANAGEMENT ---
+        function populateStoreSelects() {
+            const selects = ['filter-store', 'upload-store', 'ads-store'];
+            selects.forEach(id => {
+                const el = document.getElementById(id);
+                if(!el) return;
+                
+                let html = id === 'filter-store' ? '<option value="ALL">Semua Toko</option>' : '';
+                stores.forEach(s => html += `<option value="${s.name}">${s.name}</option>`);
+                el.innerHTML = html;
+            });
+        }
+
+        function renderStoreList() {
+            const list = document.getElementById('store-list');
+            if(stores.length === 0) {
+                list.innerHTML = '<div class="p-4 bg-white border text-gray-500 text-sm text-center rounded-xl">Belum ada toko terdaftar.</div>';
+                return;
+            }
+            list.innerHTML = stores.map((s, index) => `
+                <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col space-y-3">
+                    <div class="flex items-center justify-between border-b pb-2">
+                        <span class="font-bold text-gray-800 text-base flex items-center">
+                            <i data-lucide="store" class="text-orange-500 w-5 h-5 mr-1.5"></i>
+                            ${s.name}
+                        </span>
+                        <button onclick="triggerRemoveStore(${index})" class="text-red-500 hover:bg-red-50 p-1.5 rounded transition-colors" title="Hapus Toko">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
+                        <div>
+                            <label class="block text-xs text-gray-500 font-semibold mb-1">Admin Fee (%)</label>
+                            <input type="number" step="0.01" value="${s.adminFee}" 
+                                class="border rounded p-1.5 w-full text-center font-mono focus:border-orange-500" 
+                                onchange="updateStoreFee(${index}, 'adminFee', this.value)">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-500 font-semibold mb-1">Layanan (Rp/Order)</label>
+                            <input type="number" value="${s.serviceFee}" 
+                                class="border rounded p-1.5 w-full text-center font-mono focus:border-orange-500" 
+                                onchange="updateStoreFee(${index}, 'serviceFee', this.value)">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-500 font-semibold mb-1">Lainnya (Rp/Order)</label>
+                            <input type="number" value="${s.otherFeeRp}" 
+                                class="border rounded p-1.5 w-full text-center font-mono focus:border-orange-500" 
+                                onchange="updateStoreFee(${index}, 'otherFeeRp', this.value)">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-500 font-semibold mb-1">Lainnya (%)</label>
+                            <input type="number" step="0.01" value="${s.otherFeePct}" 
+                                class="border rounded p-1.5 w-full text-center font-mono focus:border-orange-500" 
+                                onchange="updateStoreFee(${index}, 'otherFeePct', this.value)">
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+            lucide.createIcons();
+        }
+
+        function addStore(e) {
+            e.preventDefault();
+            const inputName = document.getElementById('new-store-name');
+            const inputFee = document.getElementById('new-store-fee');
+            const inputService = document.getElementById('new-store-service');
+            const inputOtherRp = document.getElementById('new-store-other-rp');
+            const inputOtherPct = document.getElementById('new-store-other-pct');
+            
+            const name = inputName.value.trim();
+            const fee = parseFloat(inputFee.value) || 0;
+            const service = parseInt(inputService.value) || 0;
+            const otherRp = parseInt(inputOtherRp.value) || 0;
+            const otherPct = parseFloat(inputOtherPct.value) || 0;
+
+            if (stores.some(s => s.name.toLowerCase() === name.toLowerCase())) {
+                showToast("Nama toko sudah ada!", "error");
+                return;
+            }
+
+            if(name) {
+                stores.push({ 
+                    name: name, 
+                    adminFee: fee, 
+                    serviceFee: service, 
+                    otherFeeRp: otherRp, 
+                    otherFeePct: otherPct 
+                });
+                localStorage.setItem('shopeeStores', JSON.stringify(stores));
+                
+                inputName.value = '';
+                inputFee.value = '';
+                inputService.value = '1250';
+                inputOtherRp.value = '0';
+                inputOtherPct.value = '0';
+                
+                renderStoreList();
+                showToast(`Toko ${name} berhasil didaftarkan.`);
+                populateStoreSelects();
+                initDataStructure();
+            }
+        }
+
+        function updateStoreFee(index, key, newVal) {
+            const parsed = parseFloat(newVal);
+            if (!isNaN(parsed) && parsed >= 0) {
+                stores[index][key] = parsed;
+                localStorage.setItem('shopeeStores', JSON.stringify(stores));
+                showToast(`Parameter ${key} untuk ${stores[index].name} diperbarui.`);
+            }
+        }
+
+        async function triggerRemoveStore(index) {
+            const name = stores[index].name;
+            const confirmed = await customConfirm(`Hapus toko "${name}"? Data penjualan historis toko ini di database tidak hilang, namun toko tidak akan ditampilkan lagi.`);
+            if(confirmed) {
+                stores.splice(index, 1);
+                localStorage.setItem('shopeeStores', JSON.stringify(stores));
+                renderStoreList();
+                populateStoreSelects();
+                showToast(`Toko ${name} dihapus.`);
+            }
+        }
+
+        function initDataStructure() {
+            stores.forEach(s => {
+                if(!appData[s.name]) appData[s.name] = {};
+            });
+        }
+
+        async function triggerResetData() {
+            const confirmed = await customConfirm("PERINGATAN! Ini akan menghapus seluruh data omzet, berat, jumlah order, dan ad spend dari memori browser. Lanjutkan?");
+            if(confirmed) {
+                appData = {};
+                initDataStructure();
+                localStorage.setItem('shopeeAppData', JSON.stringify(appData));
+                renderDashboard();
+                showToast("Semua data berhasil direset ke kondisi awal.");
+            }
+        }
+
+        // --- DATA PROCESSING (EXCEL & FORM) ---
+        function extractDateFromFilename(filename) {
+            const match = filename.match(/Order\.all\.(\d{4})(\d{2})(\d{2})/);
+            if(match) {
+                return `${match[1]}-${match[2]}-${match[3]}`;
+            }
+            const d = new Date();
+            return d.toISOString().split('T')[0];
+        }
+
+        function handleFileUpload(e) {
+            const file = e.target.files[0];
+            if(!file) return;
+
+            const storeName = document.getElementById('upload-store').value;
+            const statusEl = document.getElementById('upload-status');
+            statusEl.classList.remove('hidden');
+            statusEl.innerText = "Membaca dan memproses format Excel Shopee...";
+            statusEl.className = "text-sm text-center text-blue-600 block mt-2";
+
+            const dateString = extractDateFromFilename(file.name);
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                try {
+                    const data = new Uint8Array(event.target.result);
+                    const workbook = XLSX.read(data, {type: 'array'});
+                    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                    
+                    const rows = XLSX.utils.sheet_to_json(firstSheet, {header: 1});
+                    
+                    let omzet = 0;
+                    let weightRaw = 0;
+                    let status = { 'Perlu Dikirim': 0, 'Sedang Dikirim': 0, 'Batal': 0 };
+
+                    for(let i = 1; i < rows.length; i++) {
+                        const row = rows[i];
+                        if(!row || row.length === 0) continue;
+
+                        // PARAMETER PEMBACAAN SEL SHOPEE:
+                        // Kolom C (Index 2): Status Pesanan
+                        // Kolom V (Index 21): Subtotal Pesanan
+                        // Kolom AB (Index 27): Total Berat
+                        
+                        const statusCell = row[2] ? row[2].toString().toLowerCase() : '';
+                        const subtotalCell = row[21] ? row[21].toString() : '0';
+                        const weightCell = row[27] ? row[27].toString() : '0';
+
+                        // Sanitasi data teks agar murni menjadi angka (menghapus Rp, spasi, titik)
+                        const cleanOmzet = parseInt(subtotalCell.replace(/[^0-9]/g, '')) || 0;
+                        const cleanWeight = parseFloat(weightCell.replace(/[^0-9.]/g, '')) || 0;
+
+                        // KRITERIA BARU: Omzet dan berat hanya dikalkulasi dari pesanan dengan status berhasil (Perlu / Sedang Dikirim)
+                        if (statusCell.includes('perlu dikirim') || statusCell.includes('telah dibayar')) {
+                            status['Perlu Dikirim']++;
+                            omzet += cleanOmzet;
+                            weightRaw += cleanWeight;
+                        } else if (statusCell.includes('sedang dikirim') || statusCell.includes('dikirim') || statusCell.includes('selesai')) {
+                            status['Sedang Dikirim']++;
+                            omzet += cleanOmzet;
+                            weightRaw += cleanWeight;
+                        } else if (statusCell.includes('batal')) {
+                            status['Batal']++;
+                        }
+                    }
+
+                    // Pembulatan berat harian ke ribuan (gr) terdekat sesuai instruksi
+                    const finalWeight = Math.round(weightRaw / 1000) * 1000;
+
+                    if(!appData[storeName]) appData[storeName] = {};
+                    if(!appData[storeName][dateString]) {
+                        appData[storeName][dateString] = { ads: 0 };
+                    }
+
+                    appData[storeName][dateString].omzet = omzet;
+                    appData[storeName][dateString].weight = finalWeight;
+                    appData[storeName][dateString].status = status;
+
+                    localStorage.setItem('shopeeAppData', JSON.stringify(appData));
+                    
+                    statusEl.innerText = `Berhasil disimpan! Tanggal data: ${dateString}.`;
+                    statusEl.className = "text-sm text-center text-green-600 block mt-2";
+                    showToast(`Selesai memproses file Excel ${storeName} tgl ${dateString}!`);
+                    
+                    document.getElementById('excel-file').value = '';
+
+                } catch (err) {
+                    console.error(err);
+                    statusEl.innerText = "Gagal memproses file. Pastikan struktur kolom Excel Shopee Anda sesuai.";
+                    statusEl.className = "text-sm text-center text-red-600 block mt-2";
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function handleAdSpend(e) {
+            e.preventDefault();
+            const storeName = document.getElementById('ads-store').value;
+            const date = document.getElementById('ads-date').value;
+            const amount = parseInt(document.getElementById('ads-amount').value) || 0;
+
+            if(!appData[storeName]) appData[storeName] = {};
+            if(!appData[storeName][date]) {
+                appData[storeName][date] = { omzet: 0, weight: 0, status: { 'Perlu Dikirim':0, 'Sedang Dikirim':0, 'Batal':0 } };
+            }
+            
+            appData[storeName][date].ads = amount;
+            localStorage.setItem('shopeeAppData', JSON.stringify(appData));
+            
+            document.getElementById('ads-amount').value = '';
+            showToast(`Ad Spend ${storeName} tanggal ${date} berhasil disimpan.`);
+        }
+
+        // --- DASHBOARD RENDERING & PROFIT CALCULATIONS ---
+        function formatRp(angka) {
+            const prefix = angka < 0 ? '-Rp ' : 'Rp ';
+            return prefix + new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(Math.abs(angka));
+        }
+
+        function getFilteredDates(days) {
+            const dates = [];
+            const today = new Date();
+            if(days === 'all') {
+                const allSet = new Set();
+                Object.values(appData).forEach(storeData => {
+                    Object.keys(storeData).forEach(d => allSet.add(d));
+                });
+                return Array.from(allSet).sort();
+            }
+
+            for(let i = days - 1; i >= 0; i--) {
+                const d = new Date(today);
+                d.setDate(d.getDate() - i);
+                dates.push(d.toISOString().split('T')[0]);
+            }
+            return dates;
+        }
+
+        function renderDashboard() {
+            const storeFilter = document.getElementById('filter-store').value;
+            const periodFilter = document.getElementById('filter-period').value;
+            
+            const targetStores = storeFilter === 'ALL' ? stores.map(s => s.name) : [storeFilter];
+            const targetDates = getFilteredDates(periodFilter);
+
+            // Globals
+            let totalOmzet = 0;
+            let totalAds = 0;
+            let totalWeight = 0;
+            let totalOrdersSuccess = 0;
+            let totalBatal = 0;
+            let totalHpp = 0;
+            let totalShopeeFees = 0;
+            let totalProfit = 0;
+
+            // Chart States
+            const chartLabels = targetDates;
+            const chartDataOmzet = [];
+            const chartDataAds = [];
+            const chartDataProfit = [];
+            const chartDataOrdersSuccess = [];
+            const chartDataOrdersBatal = [];
+
+            // Table States
+            const tableRows = [];
+
+            targetDates.forEach(date => {
+                let dailyOmzet = 0;
+                let dailyAds = 0;
+                let dailyProfit = 0;
+                let dailySuccess = 0;
+                let dailyBatal = 0;
+                
+                targetStores.forEach(storeName => {
+                    const data = appData[storeName]?.[date];
+                    if(data) {
+                        const omz = data.omzet || 0;
+                        const ad = data.ads || 0;
+                        const wgt = data.weight || 0;
+                        const st = data.status || { 'Perlu Dikirim':0, 'Sedang Dikirim':0, 'Batal':0 };
+                        
+                        const succ = st['Perlu Dikirim'] + st['Sedang Dikirim'];
+                        const btl = st['Batal'];
+
+                        // AMBIL PARAMETER BIAYA TOKO
+                        const sc = stores.find(s => s.name === storeName) || { 
+                            adminFee: 6.0, 
+                            serviceFee: 1250, 
+                            otherFeeRp: 0, 
+                            otherFeePct: 0 
+                        };
+
+                        // PENGKALKULASIAN FINANSIAL BARU:
+                        const hpp = wgt * 21.25;
+                        
+                        // Perhitungan Lapis Komponen Biaya Shopee
+                        const feeAdminPercent = omz * (sc.adminFee / 100);
+                        const feeLayananOrder = succ * sc.serviceFee;
+                        const feeLainnyaRp = succ * sc.otherFeeRp;
+                        const feeLainnyaPct = omz * (sc.otherFeePct / 100);
+                        const totalPotonganShopee = feeAdminPercent + feeLayananOrder + feeLainnyaRp + feeLainnyaPct;
+                        
+                        // Profit = Omzet - HPP - Ads - Potongan Shopee
+                        const profit = omz - hpp - ad - totalPotonganShopee;
+
+                        // Accumulate Globals
+                        totalOmzet += omz;
+                        totalAds += ad;
+                        totalWeight += wgt;
+                        totalOrdersSuccess += succ;
+                        totalBatal += btl;
+                        totalHpp += hpp;
+                        totalShopeeFees += totalPotonganShopee;
+                        totalProfit += profit;
+
+                        // Accumulate Daily
+                        dailyOmzet += omz;
+                        dailyAds += ad;
+                        dailyProfit += profit;
+                        dailySuccess += succ;
+                        dailyBatal += btl;
+
+                        // Push row
+                        if(omz > 0 || ad > 0 || succ > 0 || btl > 0) {
+                            const roi = ad > 0 ? (profit / ad).toFixed(2) : '0';
+                            const roas = ad > 0 ? (omz / ad).toFixed(2) : '0';
+                            tableRows.push(`
+                                <tr class="border-b hover:bg-orange-50/70 transition-colors">
+                                    <td class="p-4 whitespace-nowrap">${date}</td>
+                                    <td class="p-4 font-semibold text-gray-800">${storeName}</td>
+                                    <td class="p-4 text-right text-blue-600 font-medium">${formatRp(omz)}</td>
+                                    <td class="p-4 text-right text-gray-500">${formatRp(hpp)}</td>
+                                    <td class="p-4 text-right text-red-600">
+                                        <div class="font-medium">${formatRp(totalPotonganShopee)}</div>
+                                        <div class="text-[10px] text-gray-400 leading-tight">
+                                            Adm:${sc.adminFee}% | Lay:${formatRp(feeLayananOrder)}<br>
+                                            Lain:${formatRp(feeLainnyaRp)}+${sc.otherFeePct}%
+                                        </div>
+                                    </td>
+                                    <td class="p-4 text-right text-orange-600">${formatRp(ad)}</td>
+                                    <td class="p-4 text-right font-bold ${profit >= 0 ? 'text-emerald-600' : 'text-red-500'}">${formatRp(profit)}</td>
+                                    <td class="p-4 text-center font-bold ${roi >= 1 ? 'text-emerald-600' : 'text-gray-500'}">${roi}x</td>
+                                    <td class="p-4 text-center text-gray-600 font-medium">${roas}x</td>
+                                    <td class="p-4 text-center">
+                                        <span class="text-green-600 font-medium">${succ}</span> / 
+                                        <span class="text-red-400 text-xs">${btl}</span>
+                                    </td>
+                                    <td class="p-4 text-right text-gray-500">${new Intl.NumberFormat('id-ID').format(wgt)} gr</td>
+                                </tr>
+                            `);
+                        }
+                    }
+                });
+
+                chartDataOmzet.push(dailyOmzet);
+                chartDataAds.push(dailyAds);
+                chartDataProfit.push(dailyProfit);
+                chartDataOrdersSuccess.push(dailySuccess);
+                chartDataOrdersBatal.push(dailyBatal);
+            });
+
+            // Update UI KPI Cards
+            document.getElementById('kpi-omzet').innerText = formatRp(totalOmzet);
+            document.getElementById('kpi-orders').innerText = `${new Intl.NumberFormat('id-ID').format(totalOrdersSuccess)} Order Sukses | Batal: ${totalBatal}`;
+            
+            document.getElementById('kpi-profit').innerText = formatRp(totalProfit);
+            const roiGlobal = totalAds > 0 ? (totalProfit / totalAds).toFixed(2) : 0;
+            document.getElementById('kpi-roi').innerText = `ROI (Profit/Ad Spend): ${roiGlobal}x`;
+
+            document.getElementById('kpi-ads').innerText = formatRp(totalAds);
+            const roasGlobal = totalAds > 0 ? (totalOmzet / totalAds).toFixed(2) : 0;
+            const acosGlobal = totalOmzet > 0 ? ((totalAds / totalOmzet) * 100).toFixed(1) : 0;
+            document.getElementById('kpi-roas').innerText = `ROAS: ${roasGlobal}x | ACOS: ${acosGlobal}%`;
+            
+            document.getElementById('kpi-hpp').innerText = `HPP: ${formatRp(totalHpp)}`;
+            document.getElementById('kpi-admin').innerText = `Potongan Shopee: ${formatRp(totalShopeeFees)} | Berat: ${new Intl.NumberFormat('id-ID').format(totalWeight)} gr`;
+
+            // Insert into table
+            const tbody = document.getElementById('table-body');
+            if(tableRows.length > 0) {
+                tbody.innerHTML = tableRows.join('');
+            } else {
+                tbody.innerHTML = `<tr><td colspan="11" class="p-8 text-center text-gray-500">Tidak ada data terdeteksi untuk pilihan toko dan periode ini. Silakan upload Excel dan input Ad Spend Anda.</td></tr>`;
+            }
+
+            // Update Charts
+            renderCharts(chartLabels, chartDataOmzet, chartDataAds, chartDataProfit, chartDataOrdersSuccess, chartDataOrdersBatal);
+        }
+
+        function renderCharts(labels, dataOmzet, dataAds, dataProfit, dataOrdersSuccess, dataOrdersBatal) {
+            if(chart1) chart1.destroy();
+            if(chart2) chart2.destroy();
+
+            const ctx1 = document.getElementById('chartOmzet').getContext('2d');
+            chart1 = new Chart(ctx1, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Omzet Sukses (Rp)',
+                            data: dataOmzet,
+                            borderColor: '#3b82f6',
+                            backgroundColor: 'rgba(59, 130, 246, 0.05)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.2,
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: 'Net Profit (Rp)',
+                            data: dataProfit,
+                            borderColor: '#10b981',
+                            backgroundColor: 'rgba(16, 185, 129, 0.05)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.2,
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: 'Ad Spend (Rp)',
+                            data: dataAds,
+                            borderColor: '#f97316',
+                            backgroundColor: 'transparent',
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            tension: 0.2,
+                            yAxisID: 'y'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    scales: {
+                        y: { 
+                            type: 'linear', display: true, position: 'left',
+                            ticks: { callback: function(val) { return 'Rp ' + (val/1000).toFixed(0) + 'rb'; } }
+                        }
+                    }
+                }
+            });
+
+            const ctx2 = document.getElementById('chartOrder').getContext('2d');
+            chart2 = new Chart(ctx2, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Order Sukses',
+                            data: dataOrdersSuccess,
+                            backgroundColor: '#10b981',
+                            borderRadius: 4
+                        },
+                        {
+                            label: 'Order Batal',
+                            data: dataOrdersBatal,
+                            backgroundColor: '#f87171',
+                            borderRadius: 4
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+        }
+
+        // --- PRINT & EXPORT FUNCTIONS ---
+        function printDashboard() {
+            showToast("Mempersiapkan layout cetakan...");
+            window.print();
+        }
+
+        function openExcelModal() {
+            const modal = document.getElementById('excel-export-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            
+            // Atur default tanggal berdasarkan transaksi historis yang ada di database lokal
+            const dates = [];
+            Object.values(appData).forEach(storeData => {
+                Object.keys(storeData).forEach(d => dates.push(d));
+            });
+            dates.sort();
+            
+            const startInput = document.getElementById('excel-start-date');
+            const endInput = document.getElementById('excel-end-date');
+            
+            if (dates.length > 0) {
+                startInput.value = dates[0];
+                endInput.value = dates[dates.length - 1];
+            } else {
+                const today = new Date().toISOString().split('T')[0];
+                startInput.value = today;
+                endInput.value = today;
+            }
+            lucide.createIcons();
+        }
+
+        function closeExcelModal() {
+            const modal = document.getElementById('excel-export-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function processExcelExport() {
+            const startDateStr = document.getElementById('excel-start-date').value;
+            const endDateStr = document.getElementById('excel-end-date').value;
+            
+            if (!startDateStr || !endDateStr) {
+                showToast("Harap pilih rentang waktu tanggal laporan!", "error");
+                return;
+            }
+            
+            const start = new Date(startDateStr);
+            const end = new Date(endDateStr);
+            
+            if (start > end) {
+                showToast("Tanggal mulai tidak boleh melebihi tanggal selesai!", "error");
+                return;
+            }
+            
+            // Kumpulkan daftar tanggal di dalam rentang waktu terpilih
+            const datesInRange = [];
+            let tempDate = new Date(start);
+            while (tempDate <= end) {
+                datesInRange.push(tempDate.toISOString().split('T')[0]);
+                tempDate.setDate(tempDate.getDate() + 1);
+            }
+            
+            let totalOmzet = 0;
+            let totalHpp = 0;
+            let totalAdminFees = 0;
+            let totalAds = 0;
+            let totalProfit = 0;
+            let totalOrders = 0;
+            let totalWeight = 0;
+            
+            const ledgerData = [];
+            
+            datesInRange.forEach(date => {
+                stores.forEach(s => {
+                    const storeName = s.name;
+                    const data = appData[storeName]?.[date];
+                    if (data && (data.omzet > 0 || data.ads > 0)) {
+                        const omz = data.omzet || 0;
+                        const ad = data.ads || 0;
+                        const wgt = data.weight || 0;
+                        const st = data.status || { 'Perlu Dikirim':0, 'Sedang Dikirim':0, 'Batal':0 };
+                        const succ = (st['Perlu Dikirim'] || 0) + (st['Sedang Dikirim'] || 0);
+                        
+                        const adminFeePct = s.adminFee || 0;
+                        const serviceFee = s.serviceFee || 0;
+                        const otherFeeRp = s.otherFeeRp || 0;
+                        const otherFeePct = s.otherFeePct || 0;
+                        
+                        const hpp = wgt * 21.25;
+                        const feeAdminPercent = omz * (adminFeePct / 100);
+                        const feeLayananOrder = succ * serviceFee;
+                        const feeLainnyaRp = succ * otherFeeRp;
+                        const feeLainnyaPct = omz * (otherFeePct / 100);
+                        const totalPotonganShopee = feeAdminPercent + feeLayananOrder + feeLainnyaRp + feeLainnyaPct;
+                        
+                        const profit = omz - hpp - ad - totalPotonganShopee;
+                        
+                        totalOmzet += omz;
+                        totalHpp += hpp;
+                        totalAdminFees += totalPotonganShopee;
+                        totalAds += ad;
+                        totalProfit += profit;
+                        totalOrders += succ;
+                        totalWeight += wgt;
+                        
+                        ledgerData.push([
+                            date,
+                            storeName,
+                            omz,                 // Peredaran Bruto / Omzet
+                            hpp,                 // Harga Pokok Penjualan
+                            totalPotonganShopee, // Platform Fee potongan admin
+                            ad,                  // Biaya Iklan pemasaran
+                            profit,              // Laba / Pendapatan Bersih
+                            succ,                // Unit Penjualan Sukses
+                            wgt                  // Bobot logistik (gr)
+                        ]);
+                    }
+                });
+            });
+            
+            if (ledgerData.length === 0) {
+                showToast("Tidak ditemukan catatan penjualan pada rentang waktu terpilih!", "error");
+                return;
+            }
+            
+            // Struktur Lembar Kerja Excel Akuntansi & Laporan Pajak
+            const sheetData = [
+                ["LAPORAN FINANSIAL DAN PERFORMA OPERASIONAL TOKO SHOPEE"],
+                [`Dokumen Rekonsiliasi Keuangan Pajak UMKM (PP 55/2022 / Ketentuan Umum)`],
+                [`Rentang Pembukuan: ${startDateStr} s.d. ${endDateStr}`],
+                [`Tanggal Unduh Data: ${new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`],
+                [],
+                ["I. RINGKASAN REKAP FINANSIAL (KONSOLIDASI UNTUK PERHITUNGAN PAJAK)"],
+                ["Pos Laporan Keuangan", "Nilai (IDR)", "Rasio Keuangan / Deskripsi"],
+                ["Total Peredaran Bruto / Omzet Kotor", totalOmzet, "100.00% (Dasar Pengenaan Pajak PPh Final)"],
+                ["Total Harga Pokok Penjualan (HPP / COGS)", totalHpp, `${totalOmzet > 0 ? ((totalHpp/totalOmzet)*100).toFixed(2) : 0}% dari Peredaran Bruto`],
+                ["Total Biaya Potongan Komisi & Layanan Shopee", totalAdminFees, `${totalOmzet > 0 ? ((totalAdminFees/totalOmzet)*100).toFixed(2) : 0}% beban biaya platform`],
+                ["Total Beban Pemasaran (Ad Spend / Iklan)", totalAds, `${totalOmzet > 0 ? ((totalAds/totalOmzet)*100).toFixed(2) : 0}% dari Peredaran Bruto (ACOS)`],
+                ["Total Pendapatan Bersih (Net Profit Sebelum Pajak)", totalProfit, `${totalOmzet > 0 ? ((totalProfit/totalOmzet)*100).toFixed(2) : 0}% Margin Bersih Usaha`],
+                [],
+                ["II. BUKU JURNAL TRANSAKSI HARIAN DETAIL"],
+                ["Tanggal", "Nama Toko", "Peredaran Bruto / Omzet (Rp)", "HPP / COGS (Rp)", "Biaya Potongan Shopee (Rp)", "Beban Pemasaran Iklan (Rp)", "Laba Bersih Harian (Rp)", "Jumlah Transaksi Sukses", "Total Berat Pengiriman (gr)"],
+                ...ledgerData,
+                [],
+                ["TOTAL AKUMULASI", "-", totalOmzet, totalHpp, totalAdminFees, totalAds, totalProfit, totalOrders, totalWeight],
+                [],
+                ["Pernyataan Manajemen:"],
+                ["Seluruh rangkuman dan data harian ini dibuat secara otomatis berdasarkan ekspor transaksi Shopee yang valid."],
+                ["Penanggung Jawab Pembukuan Keuangan: ___________________________"]
+            ];
+            
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.aoa_to_sheet(sheetData);
+            
+            // Sesuaikan lebar kolom agar pembacaan nilai rupiah tidak terpotong
+            const maxCols = sheetData.reduce((max, row) => Math.max(max, row.length), 0);
+            const colWidths = [];
+            for (let i = 0; i < maxCols; i++) {
+                colWidths.push({ wch: 25 }); // Set lebar optimal untuk data numerik pajak
+            }
+            ws['!cols'] = colWidths;
+            
+            XLSX.utils.book_append_sheet(wb, ws, "Rekap Buku Pajak Shopee");
+            XLSX.writeFile(wb, `Laporan_Pajak_Shopee_${startDateStr}_sd_${endDateStr}.xlsx`);
+            
+            closeExcelModal();
+            showToast("Buku Rekap Keuangan Excel berhasil diekspor!");
+        }
+
+        // --- RUNNING SYSTEM ON LOAD ---
+        window.onload = function () {
+            initDataStructure();
+            populateStoreSelects();
+            switchTab('dashboard');
+        }
+
+    </script>
+</body>
+</html>
